@@ -673,5 +673,69 @@ bootLoginV10();
 try{renderGPV10();renderUsersV10();applyV10Access()}catch(e){console.warn('V10 init',e)}
 </script>
 
+
+<script id="v11-stock-manual-edit">
+(function(){
+  // Allow the displayed current stock to be set manually without changing production/sales history.
+  if(!document.getElementById('stockEditModalV11')){
+    const wrap=document.createElement('div');
+    wrap.id='stockEditModalV11'; wrap.className='modal';
+    wrap.innerHTML=`<div class="dialog" style="max-width:560px">
+      <h3>Stok Düzenle</h3>
+      <input type="hidden" id="stockEditPidV11">
+      <div class="formgrid">
+        <div class="field full"><label>Ürün</label><input id="stockEditNameV11" disabled></div>
+        <div class="field"><label>Şu Anki Stok</label><input id="stockEditCurrentV11" disabled></div>
+        <div class="field"><label>Yeni Stok</label><input id="stockEditNewV11" type="number" step="0.001"></div>
+        <div class="field full"><label>Birim</label><input id="stockEditUnitV11" disabled></div>
+      </div>
+      <div class="help" style="margin-top:8px">Üretim ve satış geçmişi değişmez. Sistem açılış stokunu otomatik ayarlar.</div>
+      <div class="actions"><button class="btn" onclick="closeModal('stockEditModalV11')">Vazgeç</button><button class="btn primary" onclick="saveStockEditV11()">Kaydet</button></div>
+    </div>`;
+    document.body.appendChild(wrap);
+  }
+
+  window.openStockEditV11=function(pid){
+    const p=product(pid); if(!p) return;
+    const cur=stockQty(pid);
+    document.getElementById('stockEditPidV11').value=pid;
+    document.getElementById('stockEditNameV11').value=p.name||'';
+    document.getElementById('stockEditCurrentV11').value=cur;
+    document.getElementById('stockEditNewV11').value=cur;
+    document.getElementById('stockEditUnitV11').value=p.unit||'';
+    openModal('stockEditModalV11');
+    setTimeout(()=>{ const el=document.getElementById('stockEditNewV11'); el.focus(); el.select(); },50);
+  };
+
+  window.saveStockEditV11=async function(){
+    const pid=document.getElementById('stockEditPidV11').value;
+    const raw=document.getElementById('stockEditNewV11').value;
+    if(raw==='') return alert('Yeni stok miktarını yaz.');
+    const desired=num(raw);
+    if(!Number.isFinite(desired)) return alert('Geçerli bir stok miktarı yaz.');
+    const made=state.production.filter(x=>x.productId===pid).reduce((a,x)=>a+num(x.qty),0);
+    let sold=0;
+    state.sales.forEach(s=>(s.items||[]).forEach(i=>{ if(i.productId===pid) sold+=num(i.qty); }));
+    state.openingStock=state.openingStock||{};
+    state.openingStock[pid]=desired-made+sold;
+    closeModal('stockEditModalV11');
+    await cloudSave();
+    renderAll();
+  };
+
+  const originalRenderStock=window.renderStock;
+  window.renderStock=function(){
+    const el=document.getElementById('stockTable');
+    if(!el) return originalRenderStock && originalRenderStock();
+    el.innerHTML=`<div class="tablewrap"><table><tr><th>Ürün</th><th>Birim</th><th class="money">Açılış</th><th class="money">Üretim</th><th class="money">Satış</th><th class="money">Mevcut</th><th>İşlem</th></tr>${state.products.map(p=>{
+      const made=state.production.filter(x=>x.productId===p.id).reduce((a,x)=>a+num(x.qty),0);
+      let sold=0; state.sales.forEach(s=>(s.items||[]).forEach(i=>{if(i.productId===p.id)sold+=num(i.qty)}));
+      return `<tr><td><b>${esc(p.name)}</b></td><td>${esc(p.unit)}</td><td class="money">${num(state.openingStock[p.id])}</td><td class="money">${made}</td><td class="money">${sold}</td><td class="money"><b>${stockQty(p.id)}</b></td><td><button class="btn" style="padding:7px 10px" onclick="openStockEditV11('${p.id}')">Düzenle</button></td></tr>`;
+    }).join('')}</table></div>`;
+  };
+  try{window.renderStock();}catch(e){console.warn('stock edit render',e)}
+})();
+</script>
+
 </body>
 </html>
