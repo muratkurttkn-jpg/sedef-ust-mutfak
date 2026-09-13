@@ -4,8 +4,6 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Sedef Üst Mutfak V10</title>
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root{--bg:#f4f6f8;--card:#fff;--text:#17202b;--muted:#667085;--line:#e4e7ec;--brand:#a31d24;--brand2:#7f151b;--ok:#15803d;--warn:#b45309;--blue:#175cd3}
 *{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -186,7 +184,6 @@ function customerLedger(cid,start,end){const opening=ledgerBalanceBefore(cid,sta
 function downloadBlob(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(url);a.remove()},1000)}
 function makeBasicPdf(lines,name){lines=lines.map(ascii);const pages=[];for(let i=0;i<lines.length;i+=52)pages.push(lines.slice(i,i+52));const objs=[];const add=x=>{objs.push(x);return objs.length};const catalog=add('<< /Type /Catalog /Pages 2 0 R >>');const pagesObj=add('PLACEHOLDER');const font=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');const pageIds=[];for(const pg of pages){const cmds=['BT','/F1 9 Tf','40 800 Td'];pg.forEach((ln,idx)=>{const safe=ln.replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');cmds.push(idx?`0 -14 Td (${safe}) Tj`:`(${safe}) Tj`)});cmds.push('ET');const stream=cmds.join('\n'),content=add(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);const page=add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${content} 0 R >>`);pageIds.push(page)}objs[1]=`<< /Type /Pages /Count ${pageIds.length} /Kids [${pageIds.map(i=>i+' 0 R').join(' ')}] >>`;let pdf='%PDF-1.4\n',offs=[0];objs.forEach((o,i)=>{offs.push(pdf.length);pdf+=`${i+1} 0 obj\n${o}\nendobj\n`});const xref=pdf.length;pdf+=`xref\n0 ${objs.length+1}\n0000000000 65535 f \n`;for(let i=1;i<offs.length;i++)pdf+=String(offs[i]).padStart(10,'0')+' 00000 n \n';pdf+=`trailer\n<< /Size ${objs.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;downloadBlob(new Blob([pdf],{type:'application/pdf'}),name)}
 function downloadPdfLines(lines,name){try{if(window.jspdf?.jsPDF){const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4'});let y=15;lines.forEach((t,i)=>{if(y>282){doc.addPage();y=15}doc.setFontSize(i===0?15:9);doc.text(ascii(String(t)),14,y);y+=i===0?8:5});downloadBlob(doc.output('blob'),name);return}}catch(e){console.warn(e)}makeBasicPdf(lines,name)}
-function exportCustomerPDF(){const cid=document.getElementById('pdfCustomer').value,mode=document.getElementById('pdfMode').value;let start='',end='',label='Tum_Gecmis';if(mode==='month'){const m=document.getElementById('pdfMonth').value;if(!m)return alert('Ay seç.');const[y,mo]=m.split('-').map(Number);start=`${m}-01`;end=`${m}-${String(new Date(y,mo,0).getDate()).padStart(2,'0')}`;label=m}else if(mode==='range'){start=document.getElementById('pdfStart').value;end=document.getElementById('pdfEnd').value;if(!start||!end||start>end)return alert('Geçerli başlangıç ve bitiş tarihleri seç.');label=`${start}_${end}`}const l=customerLedger(cid,start,end),c=customer(cid),sales=state.sales.filter(x=>x.customerId===cid&&dateInRange(x.date,start,end)).reduce((a,x)=>a+saleTotal(x),0),cols=state.payments.filter(x=>x.customerId===cid&&dateInRange(x.date,start,end)).reduce((a,x)=>a+num(x.amount),0),buys=state.purchases.filter(x=>x.customerId===cid&&dateInRange(x.date,start,end)).reduce((a,x)=>a+purchaseTotal(x),0),paid=state.purchases.filter(x=>x.customerId===cid&&dateInRange(x.date,start,end)).reduce((a,x)=>a+num(x.paidAmount),0);const lines=['SEDEF UST MUTFAK - CARI HESAP RAPORU',`Cari: ${c.name}`,`Donem: ${start||'Baslangic'} - ${end||'Bugun'}`,`Donem basi bakiye: ${plain(l.opening)} TL`,`Satis: ${plain(sales)} TL | Tahsilat: ${plain(cols)} TL | Alis: ${plain(buys)} TL | Odeme: ${plain(paid)} TL`,`Donem sonu bakiye: ${plain(l.closing)} TL`,'','HAREKETLER',...l.events.map(e=>`${e.date} | ${e.type} | ${e.desc} | Etki: ${e.effect>=0?'+':''}${plain(e.effect)} TL`)];downloadPdfLines(lines,`Cari_${ascii(c.name).replace(/\s+/g,'_')}_${label}.pdf`);closeModal('customerPdfModal')}
 
 function reportData(){const month=document.getElementById('reportMonth').value||currentMonth(),cid=document.getElementById('reportCustomer').value||'all',sales=state.sales.filter(s=>inMonth(s.date,month)&&(cid==='all'||s.customerId===cid)),payments=state.payments.filter(p=>inMonth(p.date,month)&&(cid==='all'||p.customerId===cid)),purchases=state.purchases.filter(p=>inMonth(p.date,month)&&(cid==='all'||p.customerId===cid)),production=state.production.filter(p=>inMonth(p.date,month)),expenses=state.expenses.filter(e=>inMonth(e.date,month));const lines=[];sales.forEach(s=>s.items.forEach(i=>lines.push({date:s.date,customer:customerName(s.customerId),product:productName(i.productId),qty:i.qty,unit:product(i.productId)?.unit||'',price:i.price,total:num(i.qty)*num(i.price)})));return{month,cid,sales,payments,purchases,production,expenses,lines,salesTotal:sales.reduce((a,s)=>a+saleTotal(s),0),paymentsTotal:payments.reduce((a,p)=>a+num(p.amount),0),purchaseTotal:purchases.reduce((a,p)=>a+purchaseTotal(p),0),purchasePaid:purchases.reduce((a,p)=>a+num(p.paidAmount),0),expenseTotal:expenses.reduce((a,e)=>a+num(e.amount),0)}}
 function renderReport(){const r=reportData();document.getElementById('reportArea').innerHTML=`<div class="report-summary">${[['Satış',money(r.salesTotal)],['Tahsilat',money(r.paymentsTotal)],['Alış',money(r.purchaseTotal)],['Tedarikçi Ödemesi',money(r.purchasePaid)],['Gider',money(r.expenseTotal)],['Üretim Kaydı',r.production.length]].map(x=>`<div class="card kpi"><div class="l">${x[0]}</div><div class="v">${x[1]}</div></div>`).join('')}</div><h3>Satışlar</h3>${r.lines.length?`<div class="tablewrap"><table><tr><th>Tarih</th><th>Cari</th><th>Ürün</th><th>Miktar</th><th class="money">Fiyat</th><th class="money">Tutar</th></tr>${r.lines.map(x=>`<tr><td>${x.date}</td><td>${esc(x.customer)}</td><td>${esc(x.product)}</td><td>${x.qty} ${x.unit}</td><td class="money">${money(x.price)}</td><td class="money">${money(x.total)}</td></tr>`).join('')}</table></div>`:'<div class="empty">Bu ay satış yok.</div>'}<h3>Alışlar</h3>${r.purchases.length?`<div class="tablewrap"><table><tr><th>Tarih</th><th>Cari</th><th>Ürün</th><th>Miktar</th><th class="money">Birim Fiyat</th><th class="money">Toplam</th><th class="money">Ödenen</th></tr>${r.purchases.map(x=>`<tr><td>${x.date}</td><td>${esc(customerName(x.customerId))}</td><td>${esc(x.product)}</td><td>${x.qty} ${x.unit}</td><td class="money">${money(x.price)}</td><td class="money">${money(purchaseTotal(x))}</td><td class="money">${money(x.paidAmount)}</td></tr>`).join('')}</table></div>`:'<div class="empty">Bu ay alış yok.</div>'}<h3>Üretim</h3>${r.production.length?`<div class="tablewrap"><table><tr><th>Tarih</th><th>Ürün</th><th>Miktar</th><th class="money">Birim Değer</th></tr>${r.production.map(x=>`<tr><td>${x.date}</td><td>${esc(productName(x.productId))}</td><td>${x.qty} ${product(x.productId)?.unit||''}</td><td class="money">${money(x.unitPrice)}</td></tr>`).join('')}</table></div>`:'<div class="empty">Bu ay üretim yok.</div>'}`}
@@ -258,7 +255,102 @@ function deliverFile(blob,name,openable=false){if(lastExportUrl)URL.revokeObject
 function pdfBlobFromLines(lines){lines=lines.map(x=>ascii(String(x)).slice(0,115));const pages=[];for(let i=0;i<lines.length;i+=52)pages.push(lines.slice(i,i+52));if(!pages.length)pages.push(['SEDEF UST MUTFAK']);const objs=[];const add=x=>{objs.push(x);return objs.length};add('<< /Type /Catalog /Pages 2 0 R >>');add('PLACEHOLDER');add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');const pageIds=[];for(const pg of pages){const cmds=['BT','/F1 9 Tf','40 800 Td'];pg.forEach((ln,idx)=>{const safe=ln.replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');cmds.push(idx?`0 -14 Td (${safe}) Tj`:`(${safe}) Tj`)});cmds.push('ET');const stream=cmds.join('\n'),content=add(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`),page=add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${content} 0 R >>`);pageIds.push(page)}objs[1]=`<< /Type /Pages /Count ${pageIds.length} /Kids [${pageIds.map(i=>i+' 0 R').join(' ')}] >>`;let pdf='%PDF-1.4\n',offs=[0];objs.forEach((o,i)=>{offs.push(pdf.length);pdf+=`${i+1} 0 obj\n${o}\nendobj\n`});const xref=pdf.length;pdf+=`xref\n0 ${objs.length+1}\n0000000000 65535 f \n`;for(let i=1;i<offs.length;i++)pdf+=String(offs[i]).padStart(10,'0')+' 00000 n \n';pdf+=`trailer\n<< /Size ${objs.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;return new Blob([pdf],{type:'application/pdf'})}
 function downloadPdfLines(lines,name){deliverFile(pdfBlobFromLines(lines),name,true)}
 function exportMonthlyPDF(){try{const r=reportData(),lines=['SEDEF UST MUTFAK - AYLIK RAPOR',`Donem: ${r.month}`,`Cari: ${r.cid==='all'?'Tum Cariler':customerName(r.cid)}`,`Satis: ${plain(r.salesTotal)} TL | Tahsilat: ${plain(r.paymentsTotal)} TL`,`Alis: ${plain(r.purchaseTotal)} TL | Tedarikci Odemesi: ${plain(r.purchasePaid)} TL | Gider: ${plain(r.expenseTotal)} TL`,'','SATISLAR',...r.lines.map(x=>`${x.date} | ${x.customer} | ${x.product} | ${x.qty} ${x.unit} x ${plain(x.price)} = ${plain(x.total)} TL`),'','TAHSILATLAR',...r.payments.map(x=>`${x.date} | ${customerName(x.customerId)} | ${plain(x.amount)} TL | ${x.note||''}`),'','ALISLAR',...r.purchases.map(x=>`${x.date} | ${customerName(x.customerId)} | ${x.product} | ${x.qty} ${x.unit} x ${plain(x.price)} = ${plain(purchaseTotal(x))} TL | Odenen ${plain(x.paidAmount)} TL`),'','URETIM',...r.production.map(x=>`${x.date} | ${productName(x.productId)} | ${x.qty} ${product(x.productId)?.unit||''} | Birim ${plain(x.unitPrice)} TL`),'','GIDERLER',...r.expenses.map(x=>`${x.date} | ${x.category} | ${x.description} | ${plain(x.amount)} TL`)];downloadPdfLines(lines,`Sedef_Aylik_Rapor_${r.month}.pdf`)}catch(e){console.error(e);alert('PDF oluşturulamadı: '+e.message)}}
-function exportCustomerPDF(){try{const cid=document.getElementById('pdfCustomer').value,mode=document.getElementById('pdfMode').value;let start='',end='',label='Tum_Gecmis';if(mode==='month'){const m=document.getElementById('pdfMonth').value;if(!m)return alert('Ay seç.');const[y,mo]=m.split('-').map(Number);start=`${m}-01`;end=`${m}-${String(new Date(y,mo,0).getDate()).padStart(2,'0')}`;label=m}else if(mode==='range'){start=document.getElementById('pdfStart').value;end=document.getElementById('pdfEnd').value;if(!start||!end||start>end)return alert('Geçerli başlangıç ve bitiş tarihleri seç.');label=`${start}_${end}`}const l=customerLedger(cid,start,end),c=customer(cid),sales=state.sales.filter(x=>x.customerId===cid&&dateInRange(x.date,start,end)).reduce((a,x)=>a+saleTotal(x),0),cols=state.payments.filter(x=>x.customerId===cid&&dateInRange(x.date,start,end)).reduce((a,x)=>a+num(x.amount),0),buys=state.purchases.filter(x=>x.customerId===cid&&dateInRange(x.date,start,end)).reduce((a,x)=>a+purchaseTotal(x),0),paid=state.purchases.filter(x=>x.customerId===cid&&dateInRange(x.date,start,end)).reduce((a,x)=>a+num(x.paidAmount),0);const lines=['SEDEF UST MUTFAK - CARI HESAP RAPORU',`Cari: ${c.name}`,`Donem: ${start||'Baslangic'} - ${end||'Bugun'}`,`Donem basi bakiye: ${plain(l.opening)} TL`,`Satis: ${plain(sales)} TL | Tahsilat: ${plain(cols)} TL | Alis: ${plain(buys)} TL | Odeme: ${plain(paid)} TL`,`Donem sonu bakiye: ${plain(l.closing)} TL`,'','HAREKETLER',...l.events.map(e=>`${e.date} | ${e.type} | ${e.desc} | Etki: ${e.effect>=0?'+':''}${plain(e.effect)} TL`)];downloadPdfLines(lines,`Cari_${ascii(c.name).replace(/\s+/g,'_')}_${label}.pdf`);closeModal('customerPdfModal')}catch(e){console.error(e);alert('Cari PDF oluşturulamadı: '+e.message)}}
+function exportCustomerPDF(){
+  try{
+    const cid=document.getElementById('pdfCustomer')?.value||'';
+    const mode=document.getElementById('pdfMode')?.value||'all';
+    if(!cid)return alert('Cari seçilemedi.');
+    let start='',end='',label='Tum_Gecmis';
+    if(mode==='month'){
+      const m=document.getElementById('pdfMonth')?.value||'';
+      if(!m)return alert('Ay seç.');
+      const [y,mo]=m.split('-').map(Number);
+      start=`${m}-01`;
+      end=`${m}-${String(new Date(y,mo,0).getDate()).padStart(2,'0')}`;
+      label=m;
+    }else if(mode==='range'){
+      start=document.getElementById('pdfStart')?.value||'';
+      end=document.getElementById('pdfEnd')?.value||'';
+      if(!start||!end||start>end)return alert('Geçerli başlangıç ve bitiş tarihleri seç.');
+      label=`${start}_${end}`;
+    }
+    const c=customer(cid);if(!c)return alert('Cari bulunamadı.');
+    const l=customerLedger(cid,start,end);
+    const sales=state.sales.filter(x=>x.customerId===cid&&dateInRange(x.date,start,end)).reduce((a,x)=>a+saleTotal(x),0);
+    const cols=state.payments.filter(x=>x.customerId===cid&&dateInRange(x.date,start,end)).reduce((a,x)=>a+num(x.amount),0);
+    const buys=state.purchases.filter(x=>x.customerId===cid&&dateInRange(x.date,start,end)).reduce((a,x)=>a+purchaseTotal(x),0);
+    const paid=state.purchases.filter(x=>x.customerId===cid&&dateInRange(x.date,start,end)).reduce((a,x)=>a+num(x.paidAmount),0);
+    if(!window.jspdf?.jsPDF)return alert('PDF modülü yüklenemedi. Sayfayı bir kez yenileyip tekrar deneyin.');
+
+    const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
+    const L=12,R=198,W=186;
+    const tx=v=>ascii(String(v??''));
+    const fmt=v=>plain(v)+' TL';
+    const period=(start||'Başlangıç')+' - '+(end||'Bugün');
+
+    function drawHeader(continuation=false){
+      doc.setTextColor(24,28,34);
+      doc.setFont('helvetica','bold');doc.setFontSize(15);
+      doc.text(continuation?'SEDEF UST MUTFAK - CARI HESAP RAPORU (DEVAM)':'SEDEF UST MUTFAK - CARI HESAP RAPORU',L,16);
+      if(continuation)return;
+      doc.setFontSize(9);doc.setFont('helvetica','normal');
+      doc.text('Cari:',L,28);doc.setFont('helvetica','bold');doc.text(tx(c.name),43,28);
+      doc.setFont('helvetica','normal');doc.text('Donem:',L,35);doc.setFont('helvetica','bold');doc.text(tx(period),43,35);
+      doc.setFont('helvetica','normal');doc.text('Donem basi bakiye:',L,42);doc.setFont('helvetica','bold');doc.text(fmt(l.opening),43,42);
+      doc.setFont('helvetica','normal');doc.text('Satis:',L,49);doc.setFont('helvetica','bold');doc.text(fmt(sales),43,49);
+      doc.setFont('helvetica','normal');doc.text('Tahsilat:',L,56);doc.setFont('helvetica','bold');doc.text(fmt(cols),43,56);
+      doc.setFont('helvetica','normal');doc.text('Alis:',93,56);doc.setFont('helvetica','bold');doc.text(fmt(buys),105,56);
+      doc.setFont('helvetica','normal');doc.text('Odeme:',145,56);doc.setFont('helvetica','bold');doc.text(fmt(paid),160,56);
+      doc.setDrawColor(205,210,216);doc.line(L,62,R,62);
+    }
+    function drawTableHeader(y){
+      doc.setFillColor(237,239,242);doc.rect(L,y,W,8,'F');
+      doc.setTextColor(35,39,45);doc.setFont('helvetica','bold');doc.setFontSize(7.3);
+      doc.text('Tarih',L+2,y+5.4);doc.text('Islem',38,y+5.4);doc.text('Aciklama',61,y+5.4);
+      doc.text('Tutar',165,y+5.4,{align:'right'});doc.text('Bakiye',R-2,y+5.4,{align:'right'});
+      return y+8;
+    }
+    drawHeader(false);
+    doc.setFont('helvetica','bold');doc.setFontSize(13);doc.text('HAREKETLER',L,72);
+    let y=77,running=l.opening;y=drawTableHeader(y);
+    if(!l.events.length){
+      doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text('Bu donemde hareket bulunmuyor.',L+2,y+7);y+=12;
+    }else{
+      for(const e of l.events){
+        running+=num(e.effect);
+        const desc=doc.splitTextToSize(tx(e.desc),78).slice(0,2);
+        const rh=Math.max(8,desc.length*3.7+3);
+        if(y+rh>238){doc.addPage();drawHeader(true);y=24;y=drawTableHeader(y);}
+        doc.setTextColor(32,36,42);doc.setFont('helvetica','normal');doc.setFontSize(7.1);
+        doc.text(tx(e.date),L+2,y+5.2);doc.text(tx(e.type),38,y+5.2);doc.text(desc,61,y+5.2);
+        doc.text((e.effect>=0?'+':'')+fmt(e.effect),165,y+5.2,{align:'right'});
+        doc.text(fmt(running),R-2,y+5.2,{align:'right'});
+        doc.setDrawColor(224,227,232);doc.line(L,y+rh,R,y+rh);y+=rh;
+      }
+    }
+
+    // Hareketlerden sonra, son sayfanın altındaki kırmızı dönem sonu bakiye alanı.
+    const boxY=247,boxH=25;
+    if(y>boxY-6){doc.addPage();drawHeader(true);}
+    doc.setFillColor(196,25,30);doc.roundedRect(L,boxY,W,boxH,2,2,'F');
+    doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(12.5);doc.text('ODENECEK TUTAR',27,boxY+10);
+    doc.setFontSize(8);doc.text('(DONEM SONU BAKIYE)',27,boxY+17);
+    doc.setDrawColor(255,255,255);doc.setLineWidth(.4);doc.line(95,boxY+5,95,boxY+20);
+    doc.setFontSize(20);doc.text(fmt(l.closing),R-5,boxY+16,{align:'right'});
+
+    doc.setDrawColor(90,95,103);doc.setLineWidth(.2);doc.line(L,281,R,281);
+    doc.setTextColor(85,90,98);doc.setFont('helvetica','italic');doc.setFontSize(6.5);
+    doc.text('Bu rapor SEDEF UST MUTFAK Bulut Yonetim Sistemi tarafindan otomatik olarak olusturulmustur.',L,286);
+    doc.setFont('helvetica','bold');doc.setFontSize(6.7);
+    doc.text('Tarih: '+new Date().toLocaleDateString('tr-TR')+' '+new Date().toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'}),L,291);
+    doc.setFontSize(8.5);doc.text('SEDEF UST MUTFAK',R,286,{align:'right'});
+    doc.setFont('helvetica','normal');doc.setFontSize(6.2);doc.text('Lezzet, Disiplin, Guven',R,291,{align:'right'});
+
+    const name=`Cari_${ascii(c.name).replace(/\s+/g,'_')}_${label}.pdf`;
+    doc.save(name);
+    closeModal('customerPdfModal');
+  }catch(e){console.error('Cari PDF',e);alert('Cari PDF oluşturulamadı: '+(e?.message||e));}
+}
 
 function xmlEsc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;')}
 function xmlCell(v){const n=typeof v==='number'&&Number.isFinite(v);return `<Cell><Data ss:Type="${n?'Number':'String'}">${xmlEsc(v)}</Data></Cell>`}
@@ -734,6 +826,125 @@ try{renderGPV10();renderUsersV10();applyV10Access()}catch(e){console.warn('V10 i
     }).join('')}</table></div>`;
   };
   try{window.renderStock();}catch(e){console.warn('stock edit render',e)}
+})();
+</script>
+
+<script id="v12-offline-exports">
+(function(){
+  function asc(v){
+    return String(v??'').replace(/ç/g,'c').replace(/Ç/g,'C').replace(/ğ/g,'g').replace(/Ğ/g,'G').replace(/ı/g,'i').replace(/İ/g,'I').replace(/ö/g,'o').replace(/Ö/g,'O').replace(/ş/g,'s').replace(/Ş/g,'S').replace(/ü/g,'u').replace(/Ü/g,'U').replace(/[–—]/g,'-').replace(/[“”]/g,'\"').replace(/[‘’]/g,"'").replace(/[^\x20-\x7E]/g,' ');
+  }
+  function pdfEsc(s){return asc(s).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');}
+  function moneyText(v){try{return new Intl.NumberFormat('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(v)||0)+' TL';}catch(e){return (Number(v)||0).toFixed(2)+' TL';}}
+  function pdfBlob(pages){
+    const objs=[]; const add=o=>{objs.push(o);return objs.length};
+    add('<< /Type /Catalog /Pages 2 0 R >>'); add('PAGES');
+    const fontNormal=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+    const fontBold=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
+    const pageIds=[];
+    for(const cmds of pages){
+      const stream=cmds.join('\n');
+      const content=add(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+      const page=add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontNormal} 0 R /F2 ${fontBold} 0 R >> >> /Contents ${content} 0 R >>`);
+      pageIds.push(page);
+    }
+    objs[1]=`<< /Type /Pages /Count ${pageIds.length} /Kids [${pageIds.map(i=>i+' 0 R').join(' ')}] >>`;
+    let pdf='%PDF-1.4\n'; const offs=[0];
+    objs.forEach((o,i)=>{offs.push(pdf.length);pdf+=`${i+1} 0 obj\n${o}\nendobj\n`;});
+    const xref=pdf.length; pdf+=`xref\n0 ${objs.length+1}\n0000000000 65535 f \n`;
+    for(let i=1;i<offs.length;i++)pdf+=String(offs[i]).padStart(10,'0')+' 00000 n \n';
+    pdf+=`trailer\n<< /Size ${objs.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+    return new Blob([pdf],{type:'application/pdf'});
+  }
+  function text(cmds,x,y,s,size=9,bold=false,align='left'){
+    const f=bold?'F2':'F1',safe=pdfEsc(s); let tx=x;
+    if(align==='right') tx=x-Math.min(500,safe.length*size*0.46);
+    cmds.push('BT',`/${f} ${size} Tf`,`1 0 0 1 ${tx.toFixed(1)} ${y.toFixed(1)} Tm`,`(${safe}) Tj`,'ET');
+  }
+  function line(cmds,x1,y1,x2,y2){cmds.push('0.78 0.80 0.83 RG','0.5 w',`${x1} ${y1} m ${x2} ${y2} l S`);}
+  function redBox(cmds,label,sub,value){
+    cmds.push('0.77 0.10 0.12 rg','36 55 523 58 re f','1 1 1 rg');
+    text(cmds,54,89,label,13,true); text(cmds,54,72,sub,8,true); text(cmds,548,76,value,21,true,'right'); cmds.push('0 0 0 rg');
+  }
+  function saveBlob(blob,name){
+    const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url;a.download=name;a.rel='noopener';a.style.display='none';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }
+  window.deliverFile=function(blob,name){try{saveBlob(blob,name)}catch(e){console.error(e);alert('Dosya indirilemedi: '+e.message)}};
+  window.downloadBlob=window.deliverFile;
+
+  function customerPeriod(){
+    const mode=document.getElementById('pdfMode')?.value||'month'; let start=null,end=null,label='tum_gecmis';
+    if(mode==='month'){
+      const m=document.getElementById('pdfMonth')?.value||currentMonth(); start=m+'-01'; const [y,mo]=m.split('-').map(Number);end=`${m}-${String(new Date(y,mo,0).getDate()).padStart(2,'0')}`;label=m;
+    }else if(mode==='range'){
+      start=document.getElementById('pdfStart')?.value||null; end=document.getElementById('pdfEnd')?.value||null;if(!start||!end)throw new Error('Baslangic ve bitis tarihini sec.');label=start+'_'+end;
+    }
+    return {start,end,label};
+  }
+  window.exportCustomerPDF=function(){
+    try{
+      const cid=document.getElementById('pdfCustomer')?.value; const c=customer(cid); if(!c)throw new Error('Cari bulunamadi.');
+      const {start,end,label}=customerPeriod(),l=customerLedger(cid,start,end);
+      const sales=state.sales.filter(x=>x.customerId===cid&&dateInRange(x.date,start,end)).reduce((a,x)=>a+saleTotal(x),0);
+      const cols=state.payments.filter(x=>x.customerId===cid&&dateInRange(x.date,start,end)).reduce((a,x)=>a+num(x.amount),0);
+      const buys=state.purchases.filter(x=>x.customerId===cid&&dateInRange(x.date,start,end)).reduce((a,x)=>a+purchaseTotal(x),0);
+      const paid=state.purchases.filter(x=>x.customerId===cid&&dateInRange(x.date,start,end)).reduce((a,x)=>a+num(x.paidAmount),0);
+      const pages=[]; let cmds=[],y=805,running=l.opening;
+      function header(cont=false){
+        text(cmds,36,808,cont?'SEDEF UST MUTFAK - CARI HESAP RAPORU (DEVAM)':'SEDEF UST MUTFAK - CARI HESAP RAPORU',15,true); y=780;
+        if(!cont){text(cmds,36,y,'Cari: '+c.name,10,true);y-=16;text(cmds,36,y,`Donem: ${start||'Baslangic'} - ${end||'Bugun'}`,9);y-=16;text(cmds,36,y,`Donem basi bakiye: ${moneyText(l.opening)}    Satis: ${moneyText(sales)}    Tahsilat: ${moneyText(cols)}`,9);y-=16;text(cmds,36,y,`Alis: ${moneyText(buys)}    Odeme: ${moneyText(paid)}`,9);y-=18;line(cmds,36,y,559,y);y-=24;text(cmds,36,y,'HAREKETLER',13,true);y-=20;}
+        text(cmds,36,y,'Tarih',8,true);text(cmds,96,y,'Islem',8,true);text(cmds,170,y,'Aciklama',8,true);text(cmds,444,y,'Tutar',8,true);text(cmds,548,y,'Bakiye',8,true,'right');y-=12;line(cmds,36,y,559,y);y-=10;
+      }
+      header(false);
+      const events=l.events||[];
+      if(!events.length){text(cmds,36,y,'Bu donemde hareket bulunmuyor.',9);y-=18;}
+      for(const e of events){
+        if(y<145){pages.push(cmds);cmds=[];header(true);}
+        running+=num(e.effect); const desc=asc(e.desc).slice(0,45);
+        text(cmds,36,y,e.date,7.5);text(cmds,96,y,e.type,7.5);text(cmds,170,y,desc,7.5);text(cmds,444,y,(e.effect>=0?'+':'')+moneyText(e.effect),7.5);text(cmds,548,y,moneyText(running),7.5,false,'right');y-=14;line(cmds,36,y+4,559,y+4);
+      }
+      if(y<130){pages.push(cmds);cmds=[];header(true);} redBox(cmds,'ODENECEK TUTAR','(DONEM SONU BAKIYE)',moneyText(l.closing));
+      text(cmds,36,34,'Bu rapor SEDEF UST MUTFAK Bulut Yonetim Sistemi tarafindan otomatik olarak olusturulmustur.',6.5);text(cmds,548,34,'SEDEF UST MUTFAK',8,true,'right');pages.push(cmds);
+      saveBlob(pdfBlob(pages),`Cari_${asc(c.name).replace(/\s+/g,'_')}_${label}.pdf`);closeModal('customerPdfModal');
+    }catch(e){console.error(e);alert('Cari PDF olusturulamadi: '+e.message)}
+  };
+
+  window.exportMonthlyPDF=function(){
+    try{
+      const r=reportData(),pages=[];let cmds=[],y=804;
+      text(cmds,36,y,'SEDEF UST MUTFAK - AYLIK RAPOR',15,true);y-=24;text(cmds,36,y,`Donem: ${r.month}`,10,true);y-=16;text(cmds,36,y,`Cari: ${r.cid==='all'?'Tum Cariler':customerName(r.cid)}`,9);y-=18;text(cmds,36,y,`Satis: ${moneyText(r.salesTotal)}   Tahsilat: ${moneyText(r.paymentsTotal)}   Gider: ${moneyText(r.expenseTotal)}`,9,true);y-=24;
+      const rows=[];rows.push('SATISLAR');r.lines.forEach(x=>rows.push(`${x.date} | ${x.customer} | ${x.product} | ${x.qty} ${x.unit} x ${moneyText(x.price)} = ${moneyText(x.total)}`));rows.push('TAHSILATLAR');r.payments.forEach(x=>rows.push(`${x.date} | ${customerName(x.customerId)} | ${moneyText(x.amount)} | ${x.note||''}`));rows.push('URETIM');r.production.forEach(x=>rows.push(`${x.date} | ${productName(x.productId)} | ${x.qty} ${product(x.productId)?.unit||''}`));rows.push('GIDERLER');r.expenses.forEach(x=>rows.push(`${x.date} | ${x.category} | ${x.description} | ${moneyText(x.amount)}`));
+      for(const row of rows){if(y<60){pages.push(cmds);cmds=[];y=804;text(cmds,36,y,'SEDEF UST MUTFAK - AYLIK RAPOR (DEVAM)',13,true);y-=22;}text(cmds,36,y,row,8,row==='SATISLAR'||row==='TAHSILATLAR'||row==='URETIM'||row==='GIDERLER');y-=13;}pages.push(cmds);saveBlob(pdfBlob(pages),`Sedef_Aylik_Rapor_${r.month}.pdf`);
+    }catch(e){console.error(e);alert('PDF olusturulamadi: '+e.message)}
+  };
+
+  window.exportSaleReceipt=function(saleId){
+    try{const s=state.sales.find(x=>x.id===saleId);if(!s)throw new Error('Satis kaydi bulunamadi.');const cmds=[];let y=790;text(cmds,297,y,'SATIS FISI',16,true);y-=28;text(cmds,36,y,'FIRMA ISMI: ________________________________',10);y-=18;text(cmds,36,y,'Tarih: '+s.date,10);y-=18;text(cmds,36,y,'Musteri: '+customerName(s.customerId),10,true);y-=26;text(cmds,36,y,'CINSI',8,true);text(cmds,330,y,'MIKTAR',8,true);text(cmds,405,y,'BIRIM',8,true);text(cmds,548,y,'TUTAR',8,true,'right');y-=12;line(cmds,36,y,559,y);y-=12;for(const i of s.items){text(cmds,36,y,productName(i.productId),8);text(cmds,330,y,String(i.qty),8);text(cmds,405,y,moneyText(i.price),8);text(cmds,548,y,moneyText(num(i.qty)*num(i.price)),8,false,'right');y-=16;}y-=8;line(cmds,36,y,559,y);y-=22;text(cmds,405,y,'TOPLAM:',11,true);text(cmds,548,y,moneyText(saleTotal(s)),11,true,'right');saveBlob(pdfBlob([cmds]),`Satis_Fisi_${asc(customerName(s.customerId)).replace(/\s+/g,'_')}_${s.date}.pdf`);}catch(e){console.error(e);alert('Satis fisi PDF olusturulamadi: '+e.message)}
+  };
+
+  function xmlEsc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&apos;');}
+  function cell(v){const n=typeof v==='number'&&Number.isFinite(v);return `<Cell><Data ss:Type="${n?'Number':'String'}">${xmlEsc(v)}</Data></Cell>`;}
+  function sheet(name,rows,hidden=false){return `<Worksheet ss:Name="${xmlEsc(name.slice(0,31))}"><Table>${rows.map(r=>`<Row>${r.map(cell).join('')}</Row>`).join('')}</Table>${hidden?'<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><Visible>SheetHidden</Visible></WorksheetOptions>':''}</Worksheet>`;}
+  function excelBlob(sheets){const xml=`<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" xmlns:x="urn:schemas-microsoft-com:office:excel">${sheets.map(s=>sheet(s.name,s.rows,s.hidden)).join('')}</Workbook>`;return new Blob([xml],{type:'application/vnd.ms-excel;charset=utf-8'});}
+  window.exportMonthlyExcel=function(){
+    try{const r=reportData();const sheets=[
+      {name:'SATISLAR',rows:[['Tarih','Cari','Urun','Miktar','Birim','Birim Fiyat','Tutar'],...r.lines.map(x=>[x.date,x.customer,x.product,x.qty,x.unit,x.price,x.total])]},
+      {name:'TAHSILATLAR',rows:[['Tarih','Cari','Tutar','Not'],...r.payments.map(x=>[x.date,customerName(x.customerId),x.amount,x.note||''])]},
+      {name:'ALISLAR',rows:[['Tarih','Cari','Urun','Miktar','Birim','Birim Fiyat','Toplam','Odenen','Not'],...r.purchases.map(x=>[x.date,customerName(x.customerId),x.product,x.qty,x.unit,x.price,purchaseTotal(x),x.paidAmount,x.note||''])]},
+      {name:'URETIM',rows:[['Tarih','Urun','Miktar','Birim','Birim Deger','Not'],...r.production.map(x=>[x.date,productName(x.productId),x.qty,product(x.productId)?.unit||'',x.unitPrice,x.note||''])]},
+      {name:'GIDERLER',rows:[['Tarih','Kategori','Aciklama','Tutar'],...r.expenses.map(x=>[x.date,x.category,x.description,x.amount])]},
+      {name:'CARI OZET',rows:[['Cari','Devir','Donem Satis','Donem Tahsilat','Donem Alis','Tedarikci Odemesi','Donem Sonu Bakiye'],...state.customers.map(c=>[c.name,c.openingBalance,customerSales(c.id,r.month),customerPayments(c.id,r.month),customerPurchases(c.id,r.month),customerPurchasePayments(c.id,r.month),customerBalance(c.id,r.month)])]}
+    ];saveBlob(excelBlob(sheets),`Sedef_Aylik_${r.month}.xls`);}catch(e){console.error(e);alert('Excel olusturulamadi: '+e.message)}
+  };
+  window.exportBackupExcel=function(){
+    try{const srows=[['saleId','date','customerId','customer','productId','product','qty','unitPrice','total','note']];state.sales.forEach(s=>(s.items||[]).forEach(i=>srows.push([s.id,s.date,s.customerId,customerName(s.customerId),i.productId,productName(i.productId),i.qty,i.price,num(i.qty)*num(i.price),s.note||''])));const sheets=[
+      {name:'APP_DATA',hidden:true,rows:[['SEDEF_APP_BACKUP_V5'],['Olusturma',new Date().toISOString()],['JSON',JSON.stringify(state)]]},
+      {name:'CARILER',rows:[['id','name','type','openingBalance','phone','note','active'],...state.customers.map(c=>[c.id,c.name,c.type,c.openingBalance,c.phone,c.note,c.active!==false])]},
+      {name:'URUNLER',rows:[['id','name','unit','cost','defaultPrice','active'],...state.products.map(p=>[p.id,p.name,p.unit,p.cost,p.defaultPrice,p.active!==false])]},
+      {name:'SATISLAR',rows:srows},{name:'URETIM',rows:[['id','date','productId','product','qty','unitPrice','note'],...state.production.map(x=>[x.id,x.date,x.productId,productName(x.productId),x.qty,x.unitPrice,x.note||''])]},{name:'TAHSILATLAR',rows:[['id','date','customerId','customer','amount','note'],...state.payments.map(x=>[x.id,x.date,x.customerId,customerName(x.customerId),x.amount,x.note||''])]},{name:'ALISLAR',rows:[['id','date','customerId','customer','product','qty','unit','price','total','paidAmount','note'],...state.purchases.map(x=>[x.id,x.date,x.customerId,customerName(x.customerId),x.product,x.qty,x.unit,x.price,purchaseTotal(x),x.paidAmount,x.note||''])]},{name:'GIDERLER',rows:[['id','date','category','description','amount'],...state.expenses.map(x=>[x.id,x.date,x.category,x.description,x.amount])]}
+    ];saveBlob(excelBlob(sheets),`Sedef_Ust_Mutfak_Tam_Yedek_${today()}.xls`);}catch(e){console.error(e);alert('Yedek Excel olusturulamadi: '+e.message)}
+  };
+  window.__offlineExportsReady=true;
 })();
 </script>
 
