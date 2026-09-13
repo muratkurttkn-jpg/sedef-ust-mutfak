@@ -1,4 +1,3 @@
-<!-- Vercel deployment -->
 <!doctype html>
 <html lang="tr">
 <head>
@@ -23,7 +22,7 @@
 </style>
 </head>
 <body>
-<div id="v10Login" class="v10-login hidden"><div class="v10-loginbox"><h1>SEDEF ÜST MUTFAK</h1><div class="sub">Kullanıcı Girişi • V10</div><div class="field"><label>Kullanıcı adı</label><input id="v10LoginUser" autocomplete="username" value=""></div><div class="field" style="margin-top:12px"><label>Şifre</label><input id="v10LoginPass" type="password" autocomplete="current-password" value="" onkeydown="if(event.key==='Enter')loginV10()"></div><button class="btn primary" style="width:100%;margin-top:16px" onclick="loginV10()">Giriş Yap</button><div id="v10LoginErr" class="help" style="color:#b42318;margin-top:10px"></div></div></div>
+<div id="v10Login" class="v10-login hidden"><div class="v10-loginbox"><h1>SEDEF ÜST MUTFAK</h1><div class="sub">Kullanıcı Girişi • V10</div><div class="field"><label>Kullanıcı adı</label><input id="v10LoginUser" autocomplete="username" value=""></div><div class="field" style="margin-top:12px"><label>Şifre</label><input id="v10LoginPass" type="password" autocomplete="current-password" value="" onkeydown="if(event.key==='Enter')loginV10()"></div><label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:#475467;cursor:pointer"><input id="v10RememberMe" type="checkbox" checked style="width:auto"> Bu cihazda oturumu açık tut</label><button class="btn primary" style="width:100%;margin-top:16px" onclick="loginV10()">Giriş Yap</button><div id="v10LoginErr" class="help" style="color:#b42318;margin-top:10px"></div></div></div>
 
 <div class="app">
 <aside class="side"><div class="brand">SEDEF ÜST MUTFAK<small>Bulut Yönetim Sistemi • V5</small></div><div class="nav">
@@ -622,10 +621,10 @@ function ensureV10Data(){
   state.users.forEach(u=>{if(!u.id)u.id=uid();if(!u.role)u.role='user';if(u.active===undefined)u.active=true});
   state.personnel.forEach(e=>{if(!e.id)e.id=uid();if(e.active===undefined)e.active=e.status!=='Pasif'});
 }
-function currentUserV10(){ensureV10Data();const id=sessionStorage.getItem('sedef_upper_kitchen_user');return state.users.find(u=>u.id===id&&u.active!==false)||null}
+function currentUserV10(){ensureV10Data();const id=sessionStorage.getItem('sedef_upper_kitchen_user')||localStorage.getItem('sedef_upper_kitchen_remembered_user');return state.users.find(u=>u.id===id&&u.active!==false)||null}
 function isAdminV10(){return currentUserV10()?.role==='admin'}
-function loginV10(){ensureV10Data();const un=(document.getElementById('v10LoginUser')?.value||'').trim(),pw=document.getElementById('v10LoginPass')?.value||'';const u=state.users.find(x=>x.active!==false&&String(x.username||'').toLocaleLowerCase('tr-TR')===un.toLocaleLowerCase('tr-TR')&&String(x.password||'')===String(pw));if(!u){document.getElementById('v10LoginErr').textContent='Kullanıcı adı veya şifre yanlış.';return}sessionStorage.setItem('sedef_upper_kitchen_user',u.id);document.getElementById('v10Login').classList.add('hidden');document.querySelector('.app').style.display='grid';applyV10Access();renderAll()}
-function logoutV10(){sessionStorage.removeItem('sedef_upper_kitchen_user');document.querySelector('.app').style.display='none';document.getElementById('v10Login').classList.remove('hidden')}
+function loginV10(){ensureV10Data();const un=(document.getElementById('v10LoginUser')?.value||'').trim(),pw=document.getElementById('v10LoginPass')?.value||'';const u=state.users.find(x=>x.active!==false&&String(x.username||'').toLocaleLowerCase('tr-TR')===un.toLocaleLowerCase('tr-TR')&&String(x.password||'')===String(pw));if(!u){document.getElementById('v10LoginErr').textContent='Kullanıcı adı veya şifre yanlış.';return}sessionStorage.setItem('sedef_upper_kitchen_user',u.id);if(document.getElementById('v10RememberMe')?.checked)localStorage.setItem('sedef_upper_kitchen_remembered_user',u.id);else localStorage.removeItem('sedef_upper_kitchen_remembered_user');document.getElementById('v10LoginErr').textContent='';document.getElementById('v10LoginPass').value='';document.getElementById('v10Login').classList.add('hidden');document.querySelector('.app').style.display='grid';applyV10Access();renderAll()}
+function logoutV10(){sessionStorage.removeItem('sedef_upper_kitchen_user');localStorage.removeItem('sedef_upper_kitchen_remembered_user');document.querySelector('.app').style.display='none';document.getElementById('v10LoginPass').value='';document.getElementById('v10Login').classList.remove('hidden')}
 function applyV10Access(){const u=currentUserV10(),btn=document.getElementById('usersNavBtn'),box=document.getElementById('v10UserBox');if(btn)btn.style.display=u?.role==='admin'?'block':'none';if(box)box.innerHTML=u?`Giriş yapan:<br><b>${esc(u.name||u.username)}</b> • ${u.role==='admin'?'Yönetici':'Kullanıcı'}<br><button class="btn sm" style="margin-top:8px" onclick="logoutV10()">Çıkış Yap</button>`:'';if(!isAdminV10()&&document.getElementById('users')?.classList.contains('active'))document.querySelector('[data-tab="dashboard"]')?.click()}
 function bootLoginV10(){ensureV10Data();document.querySelectorAll('.brand small').forEach(x=>x.textContent='Bulut Yönetim Sistemi • V10');document.title='Sedef Üst Mutfak V10';const u=currentUserV10();if(u){document.getElementById('v10Login').classList.add('hidden');document.querySelector('.app').style.display='grid';applyV10Access()}else{document.querySelector('.app').style.display='none';document.getElementById('v10Login').classList.remove('hidden')}}
 
